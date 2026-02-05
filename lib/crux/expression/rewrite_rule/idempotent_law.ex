@@ -7,48 +7,47 @@ defmodule Crux.Expression.RewriteRule.IdempotentLaw do
   @moduledoc """
   Rewrite rule that applies idempotent laws to simplify expressions.
 
-  See: https://en.wikipedia.org/wiki/Idempotence
-
-  Applies the transformations:
-  - `A AND A = A`
-  - `A OR A = A`
-
-  The idempotent laws state that applying the same operation twice
-  has the same effect as applying it once.
+  Optimized to gather limited depth instead of entire subtrees.
   """
 
   use Crux.Expression.RewriteRule
 
   @impl Crux.Expression.RewriteRule
-  def walk({op, left, right}) do
-    list =
-      left
-      |> gather(op)
-      |> Kernel.++(gather(right, op))
+  def needs_reapplication?, do: true
 
-    # ONLY CHANGE: Use Enum.uniq_by instead of Enum.uniq
-    # This is O(n) instead of O(n²) in Elixir 1.13+
-    uniq =
-      Enum.uniq_by(list, & &1)
+  @impl Crux.Expression.RewriteRule
+  def walk({_op, left, right}) when left == right do
+    left
+  end
+
+  def walk({op, left, right}) do
+    # Gather up to depth 3 to catch common patterns without full O(n²) blow-up
+    items = gather_limited(left, op, gather_limited(right, op, [], 3), 3)
+
+    uniq = Enum.uniq(items)
 
     case uniq do
       [single] ->
         single
 
-      multiple ->
-        if Enum.count(list) == Enum.count(uniq) do
-          {op, left, right}
-        else
-          Enum.reduce(multiple, &{op, &2, &1})
-        end
+      multiple when length(multiple) < length(items) ->
+        # Had duplicates - rebuild left-associated
+        Enum.reduce(multiple, fn item, acc -> {op, acc, item} end)
+
+      _multiple ->
+        # No duplicates
+        {op, left, right}
     end
   end
 
   def walk(other), do: other
 
-  defp gather({op, left, right}, op) do
-    gather(left, op) ++ gather(right, op)
+  # Gather with limited depth to avoid O(n²) for huge expressions
+  defp gather_limited({op, left, right}, op, cont, depth) when depth > 0 do
+    gather_limited(left, op, gather_limited(right, op, cont, depth - 1), depth - 1)
   end
 
-  defp gather(other, _), do: [other]
+  defp gather_limited(term, _op, cont, _depth) do
+    [term | cont]
+  end
 end
