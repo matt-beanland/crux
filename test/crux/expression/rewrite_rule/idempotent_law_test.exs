@@ -23,6 +23,24 @@ defmodule Crux.Expression.RewriteRule.IdempotentLawTest do
       assert Expression.postwalk(b(:a or :a), &IdempotentLaw.walk/1) == :a
     end
 
+    test "handles AND expressions with intermediate AND term" do
+      assert Expression.postwalk(b((:a and (:b and (:a and :a)))), &IdempotentLaw.walk/1) == b(:a and :b)
+    end
+
+    test "handles OR expressions with intermediate OR term" do
+      assert Expression.postwalk(b((:a or (:b or (:a or :a)))), &IdempotentLaw.walk/1) == b(:a or :b)
+    end
+
+    @tag extra: true
+    test "handles AND expressions with intermediate OR term" do
+      assert Expression.postwalk(b((:a and (:b or (:a and :a)))), &IdempotentLaw.walk/1) == b(:a and :b)
+    end
+
+    @tag extra: true
+    test "handles OR expressions with intermediate AND term" do
+      assert Expression.postwalk(b((:a or (:b and (:a or :a)))), &IdempotentLaw.walk/1) == b(:a or :b)
+    end
+
     test "works with complex sub-expressions" do
       assert Expression.postwalk(b(:a and :b and (:a and :b)), &IdempotentLaw.walk/1) ==
                b(:a and :b)
