@@ -17,7 +17,7 @@ defmodule Crux.Expression.RewriteRule do
   @type rule_options() :: [
           exclusive?: boolean(),
           needs_reapplication?: boolean(),
-          type: :prewalk | :postwalk
+          type: :prewalk | :postwalk | :bottomup
         ]
   @type acc_id(variable, acc) ::
           t() | Expression.walker(variable, acc)
@@ -39,10 +39,14 @@ defmodule Crux.Expression.RewriteRule do
   @doc """
   Returns the traversal type for this rule.
 
-  Must return either `:prewalk` or `:postwalk` to indicate when during
+  Must return `:prewalk`, `:postwalk`, or `:bottomup` to indicate when during
   tree traversal this rule should be applied.
+
+  - `:prewalk` - Apply transformation top-down (parent before children)
+  - `:postwalk` - Apply transformation bottom-up (children before parent)
+  - `:bottomup` - Apply transformation bottom-up with fixpoint iteration at each node
   """
-  @callback type() :: :prewalk | :postwalk
+  @callback type() :: :prewalk | :postwalk | :bottomup
 
   @doc """
   Transforms an expression with an accumulator.
@@ -149,7 +153,7 @@ defmodule Crux.Expression.RewriteRule do
 
   @spec get_rule_properties(rule_spec(variable, acc)) :: %{
           exclusive?: boolean(),
-          type: :prewalk | :postwalk,
+          type: :prewalk | :postwalk | :bottomup,
           needs_reapplication?: boolean()
         }
         when variable: term(), acc: term()
@@ -295,6 +299,7 @@ defmodule Crux.Expression.RewriteRule do
     case type do
       :prewalk -> apply_walker(expression, acc_map, composed, &Expression.prewalk/3)
       :postwalk -> apply_walker(expression, acc_map, composed, &Expression.postwalk/3)
+      :bottomup -> apply_walker(expression, acc_map, composed, &Expression.bottomup/3)
     end
   end
 
@@ -312,6 +317,7 @@ defmodule Crux.Expression.RewriteRule do
     case type do
       :prewalk -> Expression.prewalk(expression, acc_map, walker_fun)
       :postwalk -> Expression.postwalk(expression, acc_map, walker_fun)
+      :bottomup -> Expression.bottomup(expression, acc_map, walker_fun)
     end
   end
 

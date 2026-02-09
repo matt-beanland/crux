@@ -458,6 +458,103 @@ defmodule Crux.Expression do
   end
 
   @doc """
+  Performs a bottom-up traversal with fixpoint iteration at each node.
+
+  Similar to postwalk, but after transforming a node, the transformation
+  is reapplied until a fixpoint is reached (no further changes). This
+  ensures maximal simplification at each level before moving up the tree.
+
+  ## Examples
+
+      iex> # Simple transformation
+      iex> bottomup(b(:a and :b), fn
+      ...>   {:and, left, right} -> {:or, left, right}
+      ...>   other -> other
+      ...> end)
+      {:or, :a, :b}
+
+      iex> # Fixpoint iteration at each node
+      iex> bottomup(b(:a and (:b and :c)), fn
+      ...>   {:and, {:and, a, b}, c} -> {:and, a, {:and, b, c}}
+      ...>   {:and, a, {:and, b, c}} -> {:flatten, a, b, c}
+      ...>   other -> other
+      ...> end)
+      {:flatten, :a, :b, :c}
+
+  """
+  @spec bottomup(expression :: t(variable), fun :: walker_stateless(variable)) :: t(variable)
+        when variable: term()
+  def bottomup(expression, fun) do
+    {result, _} = bottomup(expression, nil, fn expr, nil -> {fun.(expr), nil} end)
+    result
+  end
+
+  @doc """
+  Performs a bottom-up traversal with fixpoint iteration at each node using an accumulator.
+
+  Similar to postwalk with accumulator, but reapplies the transformation at each node
+  until a fixpoint is reached.
+
+  ## Examples
+
+      iex> {_result, count} =
+      ...>   bottomup(b(:a and (:b or :c)), 0, fn
+      ...>     {:and, _, _} = expr, acc -> {expr, acc + 1}
+      ...>     {:or, _, _} = expr, acc -> {expr, acc + 1}
+      ...>     other, acc -> {other, acc}
+      ...>   end)
+      ...>
+      ...> count
+      2
+
+  """
+  @spec bottomup(
+          expression :: t(variable),
+          acc,
+          fun :: walker_stateful(variable, acc)
+        ) :: {t(variable), acc}
+        when variable: term(), acc: term()
+  def bottomup(expression, acc, fun)
+
+  def bottomup(b(left and right), acc, fun) do
+    {left, acc} = bottomup(left, acc, fun)
+    {right, acc} = bottomup(right, acc, fun)
+    bottomup_fixpoint(b(left and right), acc, fun)
+  end
+
+  def bottomup(b(left or right), acc, fun) do
+    {left, acc} = bottomup(left, acc, fun)
+    {right, acc} = bottomup(right, acc, fun)
+    bottomup_fixpoint(b(left or right), acc, fun)
+  end
+
+  def bottomup(b(not value), acc, fun) do
+    {value, acc} = bottomup(value, acc, fun)
+    bottomup_fixpoint(b(not value), acc, fun)
+  end
+
+  def bottomup(expression, acc, fun) do
+    bottomup_fixpoint(expression, acc, fun)
+  end
+
+  @spec bottomup_fixpoint(
+          expression :: t(variable),
+          acc,
+          fun :: walker_stateful(variable, acc)
+        ) :: {t(variable), acc}
+        when variable: term(), acc: term()
+  defp bottomup_fixpoint(expression, acc, fun) do
+    {new_expression, new_acc} = fun.(expression, acc)
+
+    if new_expression != expression do
+      # Expression changed, recursively apply bottomup to the result
+      bottomup(new_expression, new_acc, fun)
+    else
+      {new_expression, new_acc}
+    end
+  end
+
+  @doc """
   Checks if an expression is in Conjunctive Normal Form (CNF).
 
   CNF is a conjunction (AND) of clauses, where each clause is a
@@ -567,7 +664,7 @@ defmodule Crux.Expression do
   end
 
   @doc """
-  Simplifies a boolean expression using all available simplification laws.
+  Simplifies a boolean expression using all available simplification laws
 
   Applies all boolean laws except De Morgan's and Distributive laws, which are
   reserved for CNF conversion. This provides general-purpose simplification

@@ -168,8 +168,9 @@ Expression.run/2           # Evaluate with variable bindings
 Expression.expand/2        # Expand with custom callbacks
 
 # Traversal
-Expression.prewalk/2       # Pre-order traversal
-Expression.postwalk/2      # Post-order traversal
+Expression.prewalk/2       # Pre-order traversal (top-down)
+Expression.postwalk/2      # Post-order traversal (bottom-up)
+Expression.bottomup/2      # Bottom-up with fixpoint iteration at each node
 
 # Constraint helpers
 Expression.at_most_one/1   # At most one variable true

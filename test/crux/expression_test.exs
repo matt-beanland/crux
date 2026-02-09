@@ -283,6 +283,118 @@ defmodule Crux.ExpressionTest do
     end
   end
 
+  describe inspect(&Expression.bottomup/2) do
+    test "transforms and to or" do
+      assert b(:a or :b) =
+               Expression.bottomup(b(:a and :b), fn
+                 b(left and right) -> b(left or right)
+                 other -> other
+               end)
+    end
+
+    test "transforms nested expressions" do
+      # This test would cause infinite loop with pure fixpoint
+      # because the transformations swap and/or endlessly
+      # So we make it one-directional
+      assert b(:a or (:b or :c)) =
+               Expression.bottomup(b(:a and (:b and :c)), fn
+                 b(left and right) -> b(left or right)
+                 other -> other
+               end)
+    end
+
+    test "applies fixpoint iteration at each node" do
+      # This test demonstrates the difference from postwalk
+      # The transformation will be reapplied until no more changes
+      assert :flattened =
+               Expression.bottomup(b(:a and :b), fn
+                 b(_left and _right) -> :partial
+                 :partial -> :flattened
+                 other -> other
+               end)
+    end
+
+    test "handles nested fixpoint iteration" do
+      # Test that fixpoint iteration works at multiple levels
+      result =
+        Expression.bottomup(b((:a and :b) and (:c and :d)), fn
+          {:and, left, right} when is_atom(left) and is_atom(right) ->
+            {:combined, left, right}
+
+          {:and, {:combined, _, _} = left, {:combined, _, _} = right} ->
+            {:super_combined, left, right}
+
+          other ->
+            other
+        end)
+
+      assert result == {:super_combined, {:combined, :a, :b}, {:combined, :c, :d}}
+    end
+
+    test "transforms variables" do
+      assert b({:var, :a} and {:var, :b}) =
+               Expression.bottomup(b(:a and :b), fn
+                 var when is_atom(var) -> {:var, var}
+                 other -> other
+               end)
+    end
+
+    test "handles boolean literals" do
+      assert b(false and :a) =
+               Expression.bottomup(b(true and :a), fn
+                 true -> false
+                 other -> other
+               end)
+    end
+  end
+
+  describe inspect(&Expression.bottomup/3) do
+    test "counts operators" do
+      {_result, count} =
+        Expression.bottomup(b(:a and (:b or :c)), 0, fn
+          b(_left and _right) = expr, acc -> {expr, acc + 1}
+          b(_left or _right) = expr, acc -> {expr, acc + 1}
+          other, acc -> {other, acc}
+        end)
+
+      assert count == 2
+    end
+
+    test "collects variables" do
+      {_result, vars} =
+        Expression.bottomup(b(:a and (:b or :c)), [], fn
+          var, acc when is_atom(var) -> {var, [var | acc]}
+          other, acc -> {other, acc}
+        end)
+
+      assert Enum.sort(vars) == [:a, :b, :c]
+    end
+
+    test "transforms and collects" do
+      {result, ops} =
+        Expression.bottomup(b(:a and :b), [], fn
+          b(left and right), acc -> {b(left or right), [:and | acc]}
+          other, acc -> {other, acc}
+        end)
+
+      assert result == b(:a or :b)
+      assert ops == [:and]
+    end
+
+    test "accumulator persists through fixpoint iterations" do
+      {result, count} =
+        Expression.bottomup(b(:a and :b), 0, fn
+          b(_left and _right), acc -> {:partial, acc + 1}
+          :partial, acc -> {:final, acc + 1}
+          other, acc -> {other, acc}
+        end)
+
+      assert result == :final
+      # Count should be 2: one for the initial transformation, one for fixpoint
+      assert count == 2
+    end
+  end
+
   describe inspect(&Expression.in_cnf?/1) do
     test "recognizes valid CNF" do
       assert Expression.in_cnf?(b(:a))

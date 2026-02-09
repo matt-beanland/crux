@@ -23,7 +23,7 @@ defmodule Crux.Expression.RewriteRule.DeMorgansLaw do
   def exclusive?, do: true
 
   @impl RewriteRule
-  def needs_reapplication?, do: true
+  def type, do: :bottomup
 
   @impl RewriteRule
   def walk(b(nand(left, right))), do: b(not left or not right)

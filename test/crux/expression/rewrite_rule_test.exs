@@ -107,6 +107,37 @@ defmodule Crux.Expression.RewriteRuleTest do
     def walk(other), do: other
   end
 
+  defmodule TestBottomupRule do
+    @moduledoc false
+    use RewriteRule
+
+    @impl RewriteRule
+    def type, do: :bottomup
+
+    @impl RewriteRule
+    def walk(b(:bottomup_test)), do: :bottomup_applied
+    def walk(other), do: other
+  end
+
+  defmodule TestBottomupFixpointRule do
+    @moduledoc false
+    use RewriteRule
+
+    @impl RewriteRule
+    def type, do: :bottomup
+
+    @impl RewriteRule
+    def walk({:and, left, right}) when is_atom(left) and is_atom(right) do
+      {:combined, left, right}
+    end
+
+    def walk({:and, {:combined, _, _} = left, {:combined, _, _} = right}) do
+      {:super_combined, left, right}
+    end
+
+    def walk(other), do: other
+  end
+
   describe "rule chunking behavior" do
     test "exclusive rules get their own chunk" do
       expr = b(:exclusive_test and :a)
@@ -140,6 +171,64 @@ defmodule Crux.Expression.RewriteRuleTest do
       expr = :already_transformed
       {result, _acc_map} = RewriteRule.apply(expr, [TestReapplicationRule])
       assert result == :already_transformed
+    end
+  end
+
+  describe "bottomup walker behavior" do
+    test "applies bottomup rules" do
+      expr = b(:bottomup_test and :a)
+      {result, _acc_map} = RewriteRule.apply(expr, [TestBottomupRule])
+      assert result == b(:bottomup_applied and :a)
+    end
+
+    test "bottomup fixpoint iteration at each node" do
+      expr = b((:a and :b) and (:c and :d))
+      {result, _acc_map} = RewriteRule.apply(expr, [TestBottomupFixpointRule])
+      assert result == {:super_combined, {:combined, :a, :b}, {:combined, :c, :d}}
+    end
+
+    test "bottomup different from postwalk for fixpoint" do
+      # With bottomup, fixpoint iteration happens at each node
+      # With postwalk, you'd need needs_reapplication? for the whole expression
+      expr = b(:a and :b)
+
+      bottomup_rule = fn expr, acc ->
+        result =
+          case expr do
+            {:and, left, right} when is_atom(left) and is_atom(right) -> :combined
+            :combined -> :final
+            other -> other
+          end
+
+        {result, acc}
+      end
+
+      {result, _acc_map} = RewriteRule.apply(expr, [{bottomup_rule, nil, type: :bottomup}])
+      assert result == :final
+
+      # With postwalk, it would only apply once per full traversal
+      postwalk_rule = fn expr, acc ->
+        result =
+          case expr do
+            {:and, left, right} when is_atom(left) and is_atom(right) -> :combined
+            :combined -> :final
+            other -> other
+          end
+
+        {result, acc}
+      end
+
+      {result_postwalk, _acc_map} =
+        RewriteRule.apply(expr, [{postwalk_rule, nil, type: :postwalk}])
+
+      assert result_postwalk == :combined
+    end
+
+    test "bottomup rules get separate chunks from postwalk" do
+      expr = b(:bottomup_test and not not :b)
+      {result, _acc_map} = RewriteRule.apply(expr, [TestBottomupRule, NegationLaw])
+      # TestBottomupRule is bottomup, NegationLaw is postwalk, so separate chunks
+      assert result == b(:bottomup_applied and :b)
     end
   end
 

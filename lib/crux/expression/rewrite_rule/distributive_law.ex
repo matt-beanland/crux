@@ -23,7 +23,7 @@ defmodule Crux.Expression.RewriteRule.DistributiveLaw do
   alias Crux.Expression.RewriteRule
 
   @impl RewriteRule
-  def needs_reapplication?, do: true
+  def type, do: :bottomup
 
   @impl RewriteRule
   def walk(b(left or (right1 and right2))), do: b((left or right1) and (left or right2))

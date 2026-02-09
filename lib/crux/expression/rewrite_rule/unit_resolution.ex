@@ -25,7 +25,7 @@ defmodule Crux.Expression.RewriteRule.UnitResolution do
   alias Crux.Expression.RewriteRule
 
   @impl RewriteRule
-  def needs_reapplication?, do: true
+  def type, do: :bottomup
 
   @impl RewriteRule
   def walk(b(a and (not a or b))), do: b(a and b)
