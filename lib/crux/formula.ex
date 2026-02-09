@@ -275,19 +275,28 @@ defmodule Crux.Formula do
   end
 
   @spec lift_clauses(expression :: Expression.cnf_conjunction(literal())) :: cnf()
-  defp lift_clauses(expression)
-  defp lift_clauses(b(left and right)), do: lift_clauses(left) ++ lift_clauses(right)
+  defp lift_clauses(expression) do
+    do_lift_clauses(expression, []) |> Enum.reverse()
+  end
 
-  defp lift_clauses(b(left or right)),
-    do: [flatten_or_literals(left) ++ flatten_or_literals(right)]
+  defp do_lift_clauses(b(left and right), acc) do
+    acc = do_lift_clauses(left, acc)
+    do_lift_clauses(right, acc)
+  end
 
-  defp lift_clauses(b(not value)), do: [[-value]]
-  defp lift_clauses(value), do: [[value]]
+  defp do_lift_clauses(b(left or right), acc) do
+    clause = do_flatten_or_literals(left, []) ++ do_flatten_or_literals(right, [])
+    [clause | acc]
+  end
 
-  @spec flatten_or_literals(expression :: Expression.cnf_clause(literal())) :: [literal()]
-  defp flatten_or_literals(b(left or right)),
-    do: flatten_or_literals(left) ++ flatten_or_literals(right)
+  defp do_lift_clauses(b(not value), acc), do: [[-value] | acc]
+  defp do_lift_clauses(value, acc), do: [[value] | acc]
 
-  defp flatten_or_literals(b(not value)), do: [-value]
-  defp flatten_or_literals(value), do: [value]
+  defp do_flatten_or_literals(b(left or right), acc) do
+    acc = do_flatten_or_literals(left, acc)
+    do_flatten_or_literals(right, acc)
+  end
+
+  defp do_flatten_or_literals(b(not value), acc), do: [-value | acc]
+  defp do_flatten_or_literals(value, acc), do: [value | acc]
 end
