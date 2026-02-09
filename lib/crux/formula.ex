@@ -125,7 +125,7 @@ defmodule Crux.Formula do
       expression ->
         {bindings, reverse_bindings, expression} =
           expression
-          |> Expression.to_cnf()
+          |> to_cnf_smart()
           |> extract_bindings()
 
         %__MODULE__{
@@ -142,6 +142,15 @@ defmodule Crux.Formula do
       Expression.simplify_cnf(expression)
     else
       Expression.simplify(expression)
+    end
+  end
+
+  # Smart CNF conversion: skip if already in CNF (huge speedup for Sudoku!)
+  defp to_cnf_smart(expression) do
+    if Expression.in_cnf?(expression) do
+      expression  # Already CNF, no conversion needed!
+    else
+      Expression.to_cnf(expression)
     end
   end
 
