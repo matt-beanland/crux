@@ -128,8 +128,10 @@ defmodule Crux.Formula do
           |> to_cnf_smart()
           |> extract_bindings()
 
+        clauses = lift_clauses(expression)
+
         %__MODULE__{
-          cnf: expression |> lift_clauses() |> Enum.uniq(),
+          cnf: deduplicate_clauses(clauses),
           bindings: bindings,
           reverse_bindings: reverse_bindings
         }
@@ -299,4 +301,19 @@ defmodule Crux.Formula do
 
   defp do_flatten_or_literals(b(not value), acc), do: [-value | acc]
   defp do_flatten_or_literals(value, acc), do: [value | acc]
+
+  # Fast deduplication preserving order - O(n log n) instead of O(n²)
+  @spec deduplicate_clauses(cnf()) :: cnf()
+  defp deduplicate_clauses(clauses) do
+    {result, _seen} =
+      Enum.reduce(clauses, {[], MapSet.new()}, fn clause, {acc, seen} ->
+        if MapSet.member?(seen, clause) do
+          {acc, seen}
+        else
+          {[clause | acc], MapSet.put(seen, clause)}
+        end
+      end)
+
+    Enum.reverse(result)
+  end
 end
