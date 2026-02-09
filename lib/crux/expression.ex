@@ -703,6 +703,40 @@ defmodule Crux.Expression do
   end
 
   @doc """
+  Lightweight simplification for well-formed CNF expressions.
+
+  This is much faster than `simplify/1` for large SAT problems like Sudoku
+  because it only applies essential rules, skipping expensive operations like
+  IdempotentLaw, AbsorptionLaw, and others that rarely help CNF constraints.
+
+  Only applies:
+  - NegationLaw (double negation elimination)
+  - IdentityLaw (true/false cleanup)
+  - AnnihilatorLaw (true OR x → true, false AND x → false)
+  - ComplementLaw (a AND NOT a → false)
+
+  ## Examples
+
+      iex> # Already in CNF, minimal simplification needed
+      iex> expr = b((:a or :b) and (:c or not :d))
+      iex> simplify_cnf(expr)
+      {:and, {:or, :a, :b}, {:or, :c, {:not, :d}}}
+
+  """
+  @spec simplify_cnf(expression :: t(variable)) :: t(variable) when variable: term()
+  def simplify_cnf(expression) do
+    {result, _acc_map} =
+      RewriteRule.apply(expression, [
+        RewriteRule.NegationLaw,
+        RewriteRule.IdentityLaw,
+        RewriteRule.AnnihilatorLaw,
+        RewriteRule.ComplementLaw
+      ])
+
+    result
+  end
+
+  @doc """
   Balances a boolean expression by normalizing operand order.
 
   This function sorts operands in AND and OR expressions to create a canonical

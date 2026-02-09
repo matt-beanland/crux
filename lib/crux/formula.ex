@@ -114,7 +114,7 @@ defmodule Crux.Formula do
   def from_expression(expression) do
     expression
     |> Expression.balance()
-    |> Expression.simplify()
+    |> simplify_smart()
     |> case do
       true ->
         @simple_true
@@ -133,6 +133,15 @@ defmodule Crux.Formula do
           bindings: bindings,
           reverse_bindings: reverse_bindings
         }
+    end
+  end
+
+  # Smart simplification: use lightweight simplify_cnf for CNF expressions
+  defp simplify_smart(expression) do
+    if Expression.in_cnf?(expression) do
+      Expression.simplify_cnf(expression)
+    else
+      Expression.simplify(expression)
     end
   end
 
